@@ -39,6 +39,7 @@
       margin: 0;
       font-size: 30px;
       line-height: 1.25;
+      color: #ffffff;
     }
     header p {
       margin: 8px 0 0;
@@ -46,9 +47,73 @@
       font-size: 16px;
     }
     main {
-      max-width: 1180px;
+      max-width: 1440px;
       margin: 0 auto;
       padding: 24px 16px 48px;
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+    .toc {
+      position: sticky;
+      top: 16px;
+      max-height: calc(100vh - 32px);
+      overflow: auto;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    }
+    .toc h2 {
+      margin: 0 0 10px;
+      color: #111827;
+      font-size: 18px;
+    }
+    .toc p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .toc ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .toc li {
+      margin: 0;
+      font-size: 14px;
+    }
+    .toc a {
+      display: block;
+      color: #1f2937;
+      text-decoration: none;
+      border-radius: 6px;
+      padding: 7px 8px;
+      line-height: 1.35;
+    }
+    .toc a:hover,
+    .toc a.active {
+      background: #eaf1ff;
+      color: var(--accent-dark);
+    }
+    .toc .toc-section > a {
+      margin-top: 6px;
+      color: #0f172a;
+      font-weight: 700;
+      border-left: 3px solid var(--accent);
+    }
+    .toc .toc-sub {
+      margin: 3px 0 8px 10px;
+      padding-left: 9px;
+      border-left: 1px solid var(--border);
+    }
+    .toc .toc-sub a {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 6px 7px;
     }
     article {
       background: var(--paper);
@@ -68,10 +133,12 @@
       border-bottom: 2px solid var(--border);
       padding-bottom: 12px;
       margin-top: 36px;
+      scroll-margin-top: 20px;
     }
     h2 {
       margin-top: 30px;
       color: var(--accent-dark);
+      scroll-margin-top: 20px;
     }
     h3 {
       margin-top: 22px;
@@ -130,7 +197,16 @@
     @media (max-width: 760px) {
       header h1 { font-size: 23px; }
       article { padding: 18px; }
-      main { padding: 16px 10px 32px; }
+      main {
+        display: block;
+        padding: 16px 10px 32px;
+      }
+      .toc {
+        position: relative;
+        top: auto;
+        max-height: 340px;
+        margin-bottom: 16px;
+      }
     }
   </style>
 </head>
@@ -142,6 +218,13 @@
     </div>
   </header>
   <main>
+    <aside class="toc" aria-label="Module and topic navigation">
+      <h2>Modules & Topics</h2>
+      <p>Click karo, direct us module/topic par page scroll ho jayega.</p>
+      <nav id="toc-list">
+        <p class="loading">Loading menu...</p>
+      </nav>
+    </aside>
     <article id="content">
       <p class="loading">Loading notes...</p>
     </article>
@@ -149,6 +232,93 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script>
     const content = document.getElementById("content");
+    const tocList = document.getElementById("toc-list");
+
+    function slugify(text) {
+      return text
+        .toLowerCase()
+        .replace(/&/g, "and")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    }
+
+    function makeUniqueId(base, usedIds) {
+      let id = base || "section";
+      let counter = 2;
+      while (usedIds.has(id)) {
+        id = `${base}-${counter}`;
+        counter += 1;
+      }
+      usedIds.add(id);
+      return id;
+    }
+
+    function buildTableOfContents() {
+      const usedIds = new Set();
+      const headings = [...content.querySelectorAll("h1, h2")];
+      let currentSection = null;
+      const root = document.createElement("ul");
+
+      headings.forEach((heading) => {
+        heading.id = makeUniqueId(slugify(heading.textContent), usedIds);
+
+        if (heading.tagName === "H1") {
+          currentSection = document.createElement("li");
+          currentSection.className = "toc-section";
+
+          const link = document.createElement("a");
+          link.href = `#${heading.id}`;
+          link.textContent = heading.textContent;
+          currentSection.appendChild(link);
+
+          const subList = document.createElement("ul");
+          subList.className = "toc-sub";
+          currentSection.appendChild(subList);
+          root.appendChild(currentSection);
+        }
+
+        if (heading.tagName === "H2") {
+          if (!currentSection) {
+            currentSection = document.createElement("li");
+            currentSection.className = "toc-section";
+            const subList = document.createElement("ul");
+            subList.className = "toc-sub";
+            currentSection.appendChild(subList);
+            root.appendChild(currentSection);
+          }
+
+          const subItem = document.createElement("li");
+          const link = document.createElement("a");
+          link.href = `#${heading.id}`;
+          link.textContent = heading.textContent;
+          subItem.appendChild(link);
+          currentSection.querySelector(".toc-sub").appendChild(subItem);
+        }
+      });
+
+      tocList.innerHTML = "";
+      tocList.appendChild(root);
+      setupActiveLinks();
+    }
+
+    function setupActiveLinks() {
+      const links = [...tocList.querySelectorAll("a")];
+      const headings = links
+        .map((link) => document.querySelector(link.getAttribute("href")))
+        .filter(Boolean);
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            links.forEach((link) => link.classList.remove("active"));
+            const activeLink = tocList.querySelector(`a[href="#${entry.target.id}"]`);
+            if (activeLink) activeLink.classList.add("active");
+          }
+        });
+      }, { rootMargin: "-20% 0px -70% 0px" });
+
+      headings.forEach((heading) => observer.observe(heading));
+    }
 
     fetch("README.md", { cache: "no-store" })
       .then((response) => {
@@ -159,6 +329,7 @@
       })
       .then((markdown) => {
         content.innerHTML = marked.parse(markdown);
+        buildTableOfContents();
       })
       .catch((error) => {
         content.innerHTML = `<h1>Notes could not be loaded</h1><p class="error">${error.message}</p>`;
